@@ -1,6 +1,8 @@
-package db
+package memtable
 
-import "ouge.com/goleveldb/util"
+import (
+	"ouge.com/goleveldb/util"
+)
 
 type LookupKey struct {
 	dst    []byte

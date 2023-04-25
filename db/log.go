@@ -3,7 +3,6 @@ package db
 import (
 	"errors"
 	"fmt"
-	"hash/crc32"
 	"io"
 	"os"
 	"ouge.com/goleveldb/util"
@@ -15,12 +14,6 @@ type RecordType int32
 
 // TODO CHECKSUM
 var typeCrc [MaxRecordType]int32
-
-var tab *crc32.Table
-
-func init() {
-	tab = crc32.MakeTable(0xD5828281)
-}
 
 const (
 	RecordTypeUndefined RecordType = -1
@@ -97,7 +90,7 @@ func (w *LogWriter) emitPhysicalRecord(recordType RecordType, data []byte, n int
 	buf[6] = byte(recordType)
 
 	// 简单使用crc校验和，没有leveldb的实现复杂
-	crc := crc32.Checksum(data, tab)
+	crc := util.GetCrc32(data)
 
 	util.PutFixed32(buf[:0], crc)
 
@@ -237,7 +230,7 @@ func (r *LogReader) readPhysicalRecord() (RecordType, []byte, error) {
 		}
 
 		// simple checksum
-		crc := crc32.Checksum(header[kHeaderSize:kHeaderSize+length], tab)
+		crc := util.GetCrc32(header[kHeaderSize : kHeaderSize+length])
 		crc2 := util.DecodeFixed32(header[:4])
 		if crc2 != crc {
 			return RecordTypeUndefined, nil, errors.New("checksum fail")

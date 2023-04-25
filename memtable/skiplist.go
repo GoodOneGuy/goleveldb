@@ -1,4 +1,4 @@
-package db
+package memtable
 
 import (
 	"fmt"
@@ -92,14 +92,14 @@ func (l *SkipList) Insert(key *Key) {
 }
 
 func (l *SkipList) DebugPrint() {
-	//x := l.head
+	x := l.head
 
-	//i := 1
-	//for x.next[0] != nil {
-	//	x = x.next[0]
-	//	fmt.Println("跳表第", i, "个元素，key:", string(x.key.data), "height:", len(x.next))
-	//	i++
-	//}
+	i := 1
+	for x.next[0] != nil {
+		x = x.next[0]
+		fmt.Println("跳表第", i, "个元素，key:", string(x.key.data), "height:", len(x.next))
+		i++
+	}
 
 	fmt.Println("跳表高度:", l.maxHeight)
 }

@@ -3,37 +3,36 @@ package db
 import (
 	"fmt"
 	"os"
+	"ouge.com/goleveldb/memtable"
 	"ouge.com/goleveldb/util"
-	"sync"
 )
 
 type DB struct {
 	logWriter *LogWriter // log file write
 	name      string     // dbname
-	mu        *sync.Mutex
-	cond      *sync.Cond
 	channel   chan *WriteBatch
-	mem       *MemTable
+	mem       *memtable.MemTable
 	lastSeq   uint64
 }
 
 func NewDB(dbname string) *DB {
-	mu := sync.Mutex{}
+	memTable := memtable.NewMemTable()
+
+	db := &DB{
+		channel: make(chan *WriteBatch),
+		mem:     memTable,
+		name:    dbname,
+	}
+
+	// log文件中恢复到内存
+	db.RecoverFromLog()
 	file, err := os.OpenFile(dbname, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		fmt.Println("open file fail, err=", err)
 		return nil
 	}
 
-	memTable := NewMemTable()
-
-	db := &DB{
-		logWriter: NewLogWriter(file),
-		mu:        &mu,
-		cond:      sync.NewCond(&mu),
-		channel:   make(chan *WriteBatch),
-		mem:       memTable,
-	}
+	db.logWriter = NewLogWriter(file)
 
 	go db.writeProcess()
 	return db
@@ -48,7 +47,7 @@ func (db *DB) Put(key string, value string) {
 
 func (db *DB) Get(key string) string {
 	if db.mem != nil {
-		found, val := db.mem.Get(NewLookupKey(key, db.lastSeq))
+		found, val := db.mem.Get(memtable.NewLookupKey(key, db.lastSeq))
 		if found {
 			return val
 		}
@@ -56,29 +55,26 @@ func (db *DB) Get(key string) string {
 	return ""
 }
 
-// write 采用生产者消费者模式处理写入
 func (db *DB) write(myBatch *WriteBatch) error {
-	db.channel <- myBatch
 	// 等待写入完成
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
-	for !myBatch.done {
-		db.cond.Wait()
-	}
-
+	fmt.Println("开始写入")
+	db.channel <- myBatch
+	myBatch.Wait()
+	fmt.Println("写入完成")
 	return nil
 }
 
 // 起线程处理
 func (db *DB) writeProcess() {
+	defer func() {
+		panic("writeProcess fail")
+	}()
 	var list []*WriteBatch
-	var buf []byte
-	for true {
+	tmp := NewWriteBatch()
+	for cur := range db.channel {
+		tmp.Clear()
 		list = list[:0]
-		buf = buf[:0]
 		// 阻塞等待，避免空转
-		cur := <-db.channel
 		fmt.Println("处理写入")
 
 		// 选择一个最大值
@@ -89,15 +85,14 @@ func (db *DB) writeProcess() {
 
 		list = append(list, cur)
 
-		buf = append(buf, cur.rep...)
+		tmp.Append(cur)
 
-		// 批量处理
 		done := false
 		for cur.Length() < maxSize {
 			select {
 			case w := <-db.channel:
+				tmp.Append(w)
 				list = append(list, w)
-				buf = append(buf, w.rep...)
 			default:
 				done = true
 			}
@@ -105,29 +100,74 @@ func (db *DB) writeProcess() {
 				break
 			}
 		}
-		fmt.Println("批量处理写入, len=", len(list))
 
 		// 写入日志文件
-		db.logWriter.AddRecord(buf)
+		db.logWriter.AddRecord(tmp.rep)
 		// 写入mem table
 		for _, w := range list {
 			data := w.rep[kWriteBatchHeaderSize:]
-			tag := ValueType(data[0])
-			fmt.Println("mem处理写入, type=", tag)
+			tag := memtable.ValueType(data[0])
 			switch tag {
-			case ValueTypeValue:
+			case memtable.ValueTypeValue:
 				key, delta := util.GetLengthPrefixedSlice2(data[1:])
 				value, delta := util.GetLengthPrefixedSlice2(data[1+delta:])
-				fmt.Println("解析key:", string(key), "val:", string(value))
-				db.mem.Add(db.lastSeq, ValueTypeValue, string(key), string(value))
+				db.mem.Add(db.lastSeq, memtable.ValueTypeValue, string(key), string(value))
 				db.lastSeq++
-			case ValueTypeDeletion:
+			case memtable.ValueTypeDeletion:
 				key, _ := util.GetLengthPrefixedSlice2(data[1:])
-				db.mem.Add(db.lastSeq, ValueTypeDeletion, string(key), "")
+				db.mem.Add(db.lastSeq, memtable.ValueTypeDeletion, string(key), "")
 				db.lastSeq++
 			}
-			w.done = true
+			w.Done()
 		}
-		db.cond.Signal()
+	}
+
+	fmt.Println("结束任务")
+
+}
+
+func (db *DB) Close() {
+	close(db.channel)
+}
+
+func (db *DB) RecoverFromLog() {
+	file, err := os.OpenFile(db.name, os.O_RDONLY, 0666)
+	defer file.Close()
+	if err != nil {
+		return
+	}
+
+	logReader := NewLogReader(file)
+	found, record := logReader.ReadRecord()
+	fmt.Println("found", found)
+	for found {
+		db.LogRecordToMem(record)
+		found, record = logReader.ReadRecord()
+	}
+}
+
+func (db *DB) LogRecordToMem(record []byte) {
+	index := kWriteBatchHeaderSize
+	for index < len(record) {
+		tag := memtable.ValueType(record[index])
+		index += 1
+		switch tag {
+		case memtable.ValueTypeValue:
+			key, delta := util.GetLengthPrefixedSlice2(record[index:])
+			index += delta
+			value, delta := util.GetLengthPrefixedSlice2(record[index:])
+			index += delta
+			db.mem.Add(db.lastSeq, memtable.ValueTypeValue, string(key), string(value))
+			db.lastSeq++
+			fmt.Println("恢复key=", string(key), "val=", string(value))
+		case memtable.ValueTypeDeletion:
+			key, delta := util.GetLengthPrefixedSlice2(record[index:])
+			index += delta
+			db.mem.Add(db.lastSeq, memtable.ValueTypeDeletion, string(key), "")
+			db.lastSeq++
+		default:
+			fmt.Println("格式错误")
+			break
+		}
 	}
 }

@@ -1,4 +1,4 @@
-package db
+package memtable
 
 import (
 	"fmt"
@@ -49,7 +49,6 @@ func (m *MemTable) Add(s uint64, valueType ValueType, key string, value string) 
 	buf = util.EncodeVarint(buf, uint64(valueSize))
 	buf = append(buf, value...)
 
-	fmt.Printf("key:%s, 序列化:%x ,value序列化%x\n", key, buf, []byte(value))
 	m.table.Insert(BytesToKey(buf))
 }
 

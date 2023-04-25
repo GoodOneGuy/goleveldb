@@ -1,10 +1,13 @@
 package db
 
-import "ouge.com/goleveldb/util"
+import (
+	"ouge.com/goleveldb/memtable"
+	"ouge.com/goleveldb/util"
+)
 
 type WriteBatch struct {
-	rep  []byte
-	done bool
+	rep    []byte
+	notify chan struct{}
 }
 
 // seq count (type key value) (type key value) .... (type key value)
@@ -22,30 +25,41 @@ func (w *WriteBatch) setCount(count uint32) {
 
 func (w *WriteBatch) Put(key string, value string) {
 	w.setCount(w.count() + 1)
-	w.rep = append(w.rep, byte(ValueTypeValue))
+	w.rep = append(w.rep, byte(memtable.ValueTypeValue))
 	w.rep = util.PutLengthPrefixedSlice(w.rep, []byte(key))
 	w.rep = util.PutLengthPrefixedSlice(w.rep, []byte(value))
 }
 
 func (w *WriteBatch) Delete(key string) {
-	w.rep = append(w.rep, byte(ValueTypeDeletion))
+	w.rep = append(w.rep, byte(memtable.ValueTypeDeletion))
 	w.rep = util.PutLengthPrefixedSlice(w.rep, []byte(key))
 }
 
 func (w *WriteBatch) Clear() {
-
+	w.rep = w.rep[:kWriteBatchHeaderSize]
 }
 
 func (w *WriteBatch) Append(a *WriteBatch) {
-	w.rep = append(w.rep, a.rep...)
+	w.setCount(w.count() + 1)
+	w.rep = append(w.rep, a.rep[kWriteBatchHeaderSize:]...)
 }
 
 func (w *WriteBatch) Length() int {
 	return len(w.rep)
 }
 
+func (w *WriteBatch) Done() {
+	w.notify <- struct{}{}
+}
+
+func (w *WriteBatch) Wait() {
+	<-w.notify
+}
+
 func NewWriteBatch() *WriteBatch {
+	notify := make(chan struct{}, 1)
 	return &WriteBatch{
-		rep: make([]byte, kWriteBatchHeaderSize),
+		rep:    make([]byte, kWriteBatchHeaderSize),
+		notify: notify,
 	}
 }
