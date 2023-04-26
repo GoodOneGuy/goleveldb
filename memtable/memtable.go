@@ -21,17 +21,26 @@ type MemTable struct {
 	table *SkipList
 }
 
+func (m *MemTable) GetTable() *SkipList {
+	return m.table
+}
+
 type ValueType int32
 
 const (
-	ValueTypeDeletion = 0
-	ValueTypeValue    = 1
+	ValueTypeUndefined = -1
+	ValueTypeDeletion  = 0
+	ValueTypeValue     = 1
 )
 
 func NewMemTable() *MemTable {
 	return &MemTable{
-		table: NewSkipList(nil),
+		table: NewSkipList(internalKeyCmp),
 	}
+}
+
+func (m *MemTable) Size() int32 {
+	return m.table.Size()
 }
 
 func (m *MemTable) Add(s uint64, valueType ValueType, key string, value string) {
@@ -76,4 +85,12 @@ func (m *MemTable) Get(key *LookupKey) (found bool, value string) {
 
 	}
 	return false, ""
+}
+
+func (it *SkipListIterator) Decode() (t ValueType, key string, value string) {
+	entry := it.Key()
+	keyLength, startLen := util.ConsumeVarint(entry.data)
+	tag := util.DecodeFixed64(entry.data[startLen+int32(keyLength)-8:])
+	internalKey := util.GetLengthPrefixedSlice(entry.data)
+	return ValueType(tag & 0xff), string(internalKey[:keyLength-8]), string(util.GetLengthPrefixedSlice(entry.data[startLen+int32(keyLength):]))
 }

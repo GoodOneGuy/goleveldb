@@ -29,8 +29,8 @@ func (b *blockHandle) DecodeFrom(input []byte) int32 {
 }
 
 type Block struct {
-	data          []byte
-	restartOffset int32
+	data        []byte
+	numRestarts uint32
 }
 
 func NewBlock(data []byte) *Block {
@@ -51,7 +51,7 @@ type entry struct {
 	data      []byte // (key +val)
 }
 
-func DecodeEntry(input []byte) (*entry, int, int32) {
+func DecodeEntry(input []byte) (*entry, int32) {
 	e := &entry{}
 	shared := uint32(input[0])
 	nonShared := uint32(input[1])
@@ -75,31 +75,74 @@ func DecodeEntry(input []byte) (*entry, int, int32) {
 		length += int(codeLen)
 	}
 	fmt.Println("解析结果:shard=", e.shared, " vallen=", e.valLength, "noshared=", e.nonShared, "prefix=", length)
-	end := e.shared + e.valLength + e.nonShared + uint32(length)
+	end := e.valLength + e.nonShared + uint32(length)
 	e.data = input[length:end]
-	return e, int(e.valLength), int32(end)
+	return e, int32(end)
 }
 
 type blockIter struct {
-	block  *Block
-	offset uint64 // 当前位置
+	block   *Block
+	offset  uint64 // 当前位置
+	lastKey []byte
+	valid   bool
+	key     []byte
+	val     []byte
 }
 
-func (b *blockIter) Seek(key string) ([]byte, []byte) {
+func (b *blockIter) Seek(key string) {
 	// 不管restart 都是 0
 	b.offset = 0
 
-	fmt.Printf("block content:%x\n", b.block.data)
-	for b.offset < uint64(len(b.block.data)) {
-		e, valLen, offset := DecodeEntry(b.block.data[b.offset:])
-		curKey := e.data[:len(e.data)-valLen]
-		curval := e.data[len(e.data)-valLen:]
+	for b.offset < uint64(len(b.block.data))-uint64(b.block.numRestarts+1)*4 {
+		e, offset := DecodeEntry(b.block.data[b.offset:])
+		curval := e.data[e.nonShared:]
+
+		curKey := append(b.lastKey[:e.shared], e.data[:e.nonShared]...)
+		fmt.Println("iter key:", string(curKey), "val:", string(curval))
 
 		if string(curKey) == key {
-			fmt.Println("iter key:", string(curKey), "val:", string(curval))
-			return curKey, curval
+			b.key = curKey
+			b.val = curval
+			return
 		}
 		b.offset += uint64(offset)
+		b.lastKey = curKey
 	}
-	return nil, nil
+
+}
+
+func (b *blockIter) SeekFirst() {
+	// 不管restart 都是 0
+	b.offset = 0
+
+	e, offset := DecodeEntry(b.block.data[b.offset:])
+	curKey := e.data[:e.nonShared]
+	curval := e.data[e.nonShared:]
+	b.offset += uint64(offset)
+	b.valid = true
+	b.lastKey = curKey
+	b.key = curKey
+	b.val = curval
+}
+
+func (b *blockIter) Next() {
+	if b.offset+uint64(b.block.numRestarts+1)*4 >= uint64(len(b.block.data)) {
+		b.valid = false
+		return
+	}
+	e, offset := DecodeEntry(b.block.data[b.offset:])
+	curKey := append(b.lastKey[:e.shared], e.data[:e.nonShared]...)
+	curval := e.data[e.nonShared:]
+	b.offset += uint64(offset)
+	b.lastKey = curKey
+	b.key = curKey
+	b.val = curval
+}
+
+func (b *blockIter) Key() string {
+	return string(b.key)
+}
+
+func (b *blockIter) Value() string {
+	return string(b.val)
 }

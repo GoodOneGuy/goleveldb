@@ -18,16 +18,22 @@ func TestFooter(t *testing.T) {
 func TestWriteDB(t *testing.T) {
 	b := NewTableBuilder("1.table")
 
-	b.Add([]byte("a"), []byte("1"))
-	b.Add([]byte("b"), []byte("2"))
-	b.Add([]byte("c"), []byte("3"))
+	b.Add([]byte("abc"), []byte("1"))
+	b.Add([]byte("abcd"), []byte("2"))
+	b.Add([]byte("abdc"), []byte("3"))
+	b.Add([]byte("bsdfasdf"), []byte("3"))
+	b.Add([]byte("cdadsfsc"), []byte("3"))
+	b.Add([]byte("dadsfsc"), []byte("3"))
+	b.Add([]byte("desdfs"), []byte("3"))
+	b.Add([]byte("desdfssdf"), []byte("3"))
+	b.Add([]byte("esdfdf"), []byte("3"))
 
 	b.Finish()
 
 }
 
 func TestReadDB(t *testing.T) {
-	table, err := Open("1.table")
+	table, err := Open("test_table.2")
 	if err != nil {
 		panic(err)
 	}
@@ -37,23 +43,25 @@ func TestReadDB(t *testing.T) {
 		block: block,
 	}
 
-	_, buf := iter.Seek("c")
+	iter.SeekFirst()
 	var dataBlockHandle blockHandle
-	dataBlockHandle.DecodeFrom(buf)
+	dataBlockHandle.DecodeFrom(iter.val)
 
-	var dataBlock Block
+	fmt.Println("data block handle:", dataBlockHandle)
 	r := NewReader(table.rep.file)
-	data, err := r.ReadBlock(dataBlockHandle)
+	dataBlock, err := r.ReadBlock(dataBlockHandle)
 	if err != nil {
 		panic(err)
 	}
-	dataBlock.data = data
 
 	dataIter := blockIter{
-		block: &dataBlock,
+		block: dataBlock,
 	}
 
-	dataIter.Seek("a")
+	dataIter.SeekFirst()
 
-	fmt.Printf("read index block content :%x\n", table.rep.indexBlock)
+	for dataIter.valid {
+		fmt.Println("key=", dataIter.Key(), "val=", dataIter.Value())
+		dataIter.Next()
+	}
 }

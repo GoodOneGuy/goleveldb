@@ -3,6 +3,7 @@ package memtable
 import (
 	"fmt"
 	"math/rand"
+	"ouge.com/goleveldb/util"
 )
 
 const kMaxHeight = 12
@@ -15,14 +16,31 @@ func defaultCompare(key1 *Key, key2 *Key) int32 {
 	if string(key1.data) == string(key2.data) {
 		return 0
 	} else if string(key1.data) < string(key2.data) {
-		return 1
-	} else {
 		return -1
+	} else {
+		return 1
+	}
+}
+
+func internalKeyCmp(key1 *Key, key2 *Key) int32 {
+	realKey1 := key1.UserKey()
+	realKey2 := key2.UserKey()
+	if string(realKey1) == string(realKey2) {
+		return 0
+	} else if string(realKey1) < string(realKey2) {
+		return -1
+	} else {
+		return 1
 	}
 }
 
 type Key struct {
 	data []byte
+}
+
+func (k *Key) UserKey() []byte {
+	key, _ := util.GetLengthPrefixedSlice2(k.data)
+	return key[:len(key)-8]
 }
 
 func StringToKey(str string) *Key {
@@ -55,6 +73,7 @@ type SkipList struct {
 	head      *Node
 	maxHeight int32 // 当前最大高度，需要小于kMaxHeight
 	compare   Comparator
+	memSize   int32
 }
 
 func NewSkipList(cmp Comparator) *SkipList {
@@ -69,6 +88,10 @@ func NewSkipList(cmp Comparator) *SkipList {
 	}
 
 	return l
+}
+
+func (l *SkipList) Size() int32 {
+	return l.memSize
 }
 
 func (l *SkipList) Insert(key *Key) {
@@ -89,6 +112,7 @@ func (l *SkipList) Insert(key *Key) {
 		prev[i].next[i] = n
 	}
 
+	l.memSize += int32(len(key.data))
 }
 
 func (l *SkipList) DebugPrint() {
@@ -200,6 +224,14 @@ func NewSkipListIterator(l *SkipList) *SkipListIterator {
 		l:   l,
 		cur: nil,
 	}
+}
+
+func (it *SkipListIterator) SeekToFirst() {
+	it.cur = it.l.head.next[0]
+}
+
+func (it *SkipListIterator) Next() {
+	it.cur = it.cur.next[0]
 }
 
 func (it *SkipListIterator) Seek(key *Key) {

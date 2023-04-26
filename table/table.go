@@ -46,16 +46,15 @@ func Open(dbname string) (*Table, error) {
 	}
 
 	reader := NewReader(file)
-	data, err := reader.ReadBlock(footer.indexHandle)
+	block, err := reader.ReadBlock(footer.indexHandle)
 	if err != nil {
+		fmt.Println(err)
 		return nil, errors.New("read block fail")
 	}
 
 	rep := &Rep{
-		file: file,
-		indexBlock: &Block{
-			data: data,
-		},
+		file:            file,
+		indexBlock:      block,
 		metaIndexHandle: footer.metaIndexHandle,
 	}
 
@@ -69,12 +68,12 @@ func (t *Table) ReadMeta(footer Footer) {
 	reader := NewReader(t.rep.file)
 
 	metaIndexHandle := footer.metaIndexHandle
-	data, err := reader.ReadBlock(metaIndexHandle)
+	block, err := reader.ReadBlock(metaIndexHandle)
 	if err != nil {
 		return
 	}
 
-	t.ReadFilter(data)
+	t.ReadFilter(block.data)
 }
 
 func (t *Table) ReadFilter(input []byte) {

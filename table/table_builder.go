@@ -57,15 +57,15 @@ func (t *tableBuilder) Flush() {
 
 func (t *tableBuilder) WriteRawBlock(b *blockBuilder) *blockHandle {
 	var result blockHandle
+	t.file.Write(b.Finish())
 	result.offset = t.offset
 	result.size = uint64(len(b.buf))
-
-	t.file.Write(b.buf)
 
 	// trailer 1 byte type + 32-bit crc
 	trailer := make([]byte, 0) // todo type
 	trailer = append(trailer, byte(0))
 	crc := util.GetCrc32(b.buf)
+
 	trailer = util.PutFixed32(trailer, crc)
 	t.file.Write(trailer)
 
@@ -76,7 +76,7 @@ func (t *tableBuilder) WriteRawBlock(b *blockBuilder) *blockHandle {
 
 func (t *tableBuilder) Finish() {
 	t.Flush()
-
+	fmt.Println("data block handle:", t.pendingHandle)
 	// write index block
 	if t.pendingIndexEntry {
 		var tmp []byte

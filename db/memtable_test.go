@@ -11,6 +11,11 @@ func TestMemTable_Add(t *testing.T) {
 	mem.Add(1, memtable.ValueTypeValue, "key_1", "value_2")
 	mem.Add(2, memtable.ValueTypeDeletion, "key_1", "value_1")
 
-	found, value := mem.Get(memtable.NewLookupKey("key_1", 3))
-	fmt.Println(found, value)
+	iter := memtable.NewSkipListIterator(mem.GetTable())
+	iter.SeekToFirst()
+	for iter.Valid() {
+		_, key, val := iter.Decode()
+		fmt.Println("key=", key, "val=", val)
+		iter.Next()
+	}
 }

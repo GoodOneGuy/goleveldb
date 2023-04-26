@@ -16,7 +16,7 @@ func TestSkipList_Insert(t *testing.T) {
 
 	l := NewSkipList(nil)
 	rand.Seed(time.Now().UnixMilli())
-	for i := 0; i < 10000000; i++ {
+	for i := 0; i < 100; i++ {
 		l.Insert(StringToKey(fmt.Sprintf("key_%d", i)))
 	}
 

@@ -28,7 +28,6 @@ func TestNewDB(t *testing.T) {
 			for j := 0; j < 100; j++ {
 				key := util.RandomString(10)
 				val := util.RandomString(10)
-				fmt.Println("设置key=", key, " val=", val)
 				db.Put(string(key), string(val))
 			}
 			wg.Done()
@@ -79,4 +78,24 @@ func TestLogReader_ReadRecord(t *testing.T) {
 		fmt.Print("get record fail, err:", err)
 	}
 	fmt.Println(string(record))
+}
+
+func TestDBTable(t *testing.T) {
+
+	db := NewDB("test")
+
+	wg := sync.WaitGroup{}
+
+	start := time.Now()
+	for j := 0; j < 1000; j++ {
+		key := fmt.Sprintf("key_%d", j)
+		val := util.RandomString(100)
+		db.Put(string(key), string(val))
+	}
+
+	wg.Wait()
+	time.Sleep(10 * time.Second)
+	fmt.Println("处理时长 ms", time.Now().Sub(start).Milliseconds())
+	db.Close()
+	fmt.Print("全部完成")
 }

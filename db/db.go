@@ -3,16 +3,31 @@ package db
 import (
 	"fmt"
 	"os"
+	"ouge.com/goleveldb/filename"
 	"ouge.com/goleveldb/memtable"
+	"ouge.com/goleveldb/table"
 	"ouge.com/goleveldb/util"
+	"sync"
 )
+
+const kMaxMemSize = 1024 * 20
+
+type cmNotity struct {
+	ch chan error
+}
 
 type DB struct {
 	logWriter *LogWriter // log file write
 	name      string     // dbname
 	channel   chan *WriteBatch
-	mem       *memtable.MemTable
 	lastSeq   uint64
+
+	fileNumber int
+
+	memLock   sync.RWMutex
+	mem       *memtable.MemTable
+	frozenMem *memtable.MemTable
+	cmWait    chan *cmNotity
 }
 
 func NewDB(dbname string) *DB {
@@ -26,7 +41,8 @@ func NewDB(dbname string) *DB {
 
 	// log文件中恢复到内存
 	db.RecoverFromLog()
-	file, err := os.OpenFile(dbname, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	fileName := filename.LogFileName(dbname, db.NewFileNumber())
+	file, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		fmt.Println("open file fail, err=", err)
 		return nil
@@ -42,7 +58,6 @@ func (db *DB) Put(key string, value string) {
 	wb := NewWriteBatch()
 	wb.Put(key, value)
 	db.write(wb)
-	fmt.Println("write success")
 }
 
 func (db *DB) Get(key string) string {
@@ -56,26 +71,22 @@ func (db *DB) Get(key string) string {
 }
 
 func (db *DB) write(myBatch *WriteBatch) error {
+
 	// 等待写入完成
-	fmt.Println("开始写入")
 	db.channel <- myBatch
 	myBatch.Wait()
-	fmt.Println("写入完成")
 	return nil
 }
 
 // 起线程处理
 func (db *DB) writeProcess() {
-	defer func() {
-		panic("writeProcess fail")
-	}()
+
 	var list []*WriteBatch
 	tmp := NewWriteBatch()
 	for cur := range db.channel {
 		tmp.Clear()
 		list = list[:0]
 		// 阻塞等待，避免空转
-		fmt.Println("处理写入")
 
 		// 选择一个最大值
 		maxSize := 1 << 20
@@ -120,10 +131,12 @@ func (db *DB) writeProcess() {
 			}
 			w.Done()
 		}
+
+		// minor compaction
+		db.Compaction()
 	}
 
 	fmt.Println("结束任务")
-
 }
 
 func (db *DB) Close() {
@@ -159,7 +172,6 @@ func (db *DB) LogRecordToMem(record []byte) {
 			index += delta
 			db.mem.Add(db.lastSeq, memtable.ValueTypeValue, string(key), string(value))
 			db.lastSeq++
-			fmt.Println("恢复key=", string(key), "val=", string(value))
 		case memtable.ValueTypeDeletion:
 			key, delta := util.GetLengthPrefixedSlice2(record[index:])
 			index += delta
@@ -170,4 +182,50 @@ func (db *DB) LogRecordToMem(record []byte) {
 			break
 		}
 	}
+}
+
+func (db *DB) NewFileNumber() int {
+	db.fileNumber++
+	return db.fileNumber
+}
+
+func (db *DB) Compaction() {
+	if db.mem.Size() < kMaxMemSize {
+		return
+	}
+
+	db.memLock.Lock()
+
+	filename := filename.LogFileName(db.name, db.NewFileNumber())
+	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		return
+	}
+
+	db.logWriter.dst.(*os.File).Close()
+
+	db.frozenMem = db.mem
+	db.mem = memtable.NewMemTable()
+	db.logWriter = NewLogWriter(file)
+	go db.MinorCompaction()
+}
+
+// MinorCompaction caller must hold lock
+func (db *DB) MinorCompaction() {
+	fmt.Println("写入db文件")
+	fileName := filename.TableFileName(db.name, db.fileNumber)
+	builder := table.NewTableBuilder(fileName)
+
+	iter := memtable.NewSkipListIterator(db.frozenMem.GetTable())
+	iter.SeekToFirst()
+	for iter.Valid() {
+		_, key, val := iter.Decode()
+		fmt.Println("key=", key, "val=", val)
+		builder.Add([]byte(key), []byte(val))
+		iter.Next()
+	}
+	builder.Finish()
+
+	db.frozenMem = nil
+	db.memLock.Unlock()
 }

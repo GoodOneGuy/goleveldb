@@ -1,6 +1,10 @@
 package table
 
-import "ouge.com/goleveldb/util"
+import (
+	"ouge.com/goleveldb/util"
+)
+
+const kRestartInterval = 4
 
 type blockBuilder struct {
 	buf      []byte
@@ -48,8 +52,23 @@ Key/value entry:
 
 func (b *blockBuilder) Add(key []byte, value []byte) {
 	shared := 0
+	if b.counter < kRestartInterval {
+		for i := 0; i < len(b.lastKey) && i < len(key); i++ {
+			if b.lastKey[i] != key[i] {
+				break
+			}
+			shared++
+		}
+		b.counter++
+	} else {
+		b.restarts = append(b.restarts, int32(len(b.buf)))
+		b.counter = 0
+		b.lastKey = b.lastKey[:0]
+	}
+
 	notShared := len(key) - shared
 	valLen := len(value)
+
 	b.buf = util.PutVarint(b.buf, uint64(shared))
 	b.buf = util.PutVarint(b.buf, uint64(notShared))
 	b.buf = util.PutVarint(b.buf, uint64(valLen))

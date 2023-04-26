@@ -16,7 +16,7 @@ func NewReader(file io.Reader) *Reader {
 		reader: file,
 	}
 }
-func (r *Reader) ReadBlock(handle blockHandle) ([]byte, error) {
+func (r *Reader) ReadBlock(handle blockHandle) (*Block, error) {
 
 	dataLen := handle.size + kBlockTrailerSize
 
@@ -42,5 +42,10 @@ func (r *Reader) ReadBlock(handle blockHandle) ([]byte, error) {
 
 	//todo compression
 
-	return buf[:handle.size], nil
+	data := buf[:handle.size]
+	block := &Block{
+		data:        data,
+		numRestarts: util.DecodeFixed32(data[len(data)-4:]),
+	}
+	return block, nil
 }
