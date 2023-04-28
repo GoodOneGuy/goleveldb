@@ -25,17 +25,17 @@ type DB struct {
 	fileNumber int
 
 	memLock   sync.RWMutex
-	mem       *memtable.MemTable
-	frozenMem *memtable.MemTable
+	mem       *memtable.MemDB
+	frozenMem *memtable.MemDB
 	cmWait    chan *cmNotity
 }
 
 func NewDB(dbname string) *DB {
-	memTable := memtable.NewMemTable()
+	memDB := memtable.NewMemDB()
 
 	db := &DB{
 		channel: make(chan *WriteBatch),
-		mem:     memTable,
+		mem:     memDB,
 		name:    dbname,
 	}
 
@@ -86,7 +86,6 @@ func (db *DB) writeProcess() {
 	for cur := range db.channel {
 		tmp.Clear()
 		list = list[:0]
-		// 阻塞等待，避免空转
 
 		// 选择一个最大值
 		maxSize := 1 << 20
@@ -205,7 +204,7 @@ func (db *DB) Compaction() {
 	db.logWriter.dst.(*os.File).Close()
 
 	db.frozenMem = db.mem
-	db.mem = memtable.NewMemTable()
+	db.mem = memtable.NewMemDB()
 	db.logWriter = NewLogWriter(file)
 	go db.MinorCompaction()
 }
@@ -216,10 +215,10 @@ func (db *DB) MinorCompaction() {
 	fileName := filename.TableFileName(db.name, db.fileNumber)
 	builder := table.NewTableBuilder(fileName)
 
-	iter := memtable.NewSkipListIterator(db.frozenMem.GetTable())
+	iter := memtable.NewIterator(db.frozenMem)
 	iter.SeekToFirst()
 	for iter.Valid() {
-		_, key, val := iter.Decode()
+		key, val := iter.Key(), iter.Value()
 		fmt.Println("key=", key, "val=", val)
 		builder.Add([]byte(key), []byte(val))
 		iter.Next()

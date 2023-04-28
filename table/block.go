@@ -74,7 +74,7 @@ func DecodeEntry(input []byte) (*entry, int32) {
 		e.valLength = uint32(varNum)
 		length += int(codeLen)
 	}
-	fmt.Println("解析结果:shard=", e.shared, " vallen=", e.valLength, "noshared=", e.nonShared, "prefix=", length)
+	//fmt.Println("解析结果:shard=", e.shared, " vallen=", e.valLength, "noshared=", e.nonShared, "prefix=", length)
 	end := e.valLength + e.nonShared + uint32(length)
 	e.data = input[length:end]
 	return e, int32(end)

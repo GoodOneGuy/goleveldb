@@ -65,3 +65,40 @@ func TestReadDB(t *testing.T) {
 		dataIter.Next()
 	}
 }
+
+func TestCache_GetTable(t *testing.T) {
+	c := NewCache("test", 3)
+
+	for i := 2; i <= 100; i++ {
+		table := c.GetTable(i % 4)
+		if table != nil {
+			block := table.rep.indexBlock
+			iter := blockIter{
+				block: block,
+			}
+
+			iter.SeekFirst()
+			var dataBlockHandle blockHandle
+			dataBlockHandle.DecodeFrom(iter.val)
+
+			fmt.Println("data block handle:", dataBlockHandle)
+			r := NewReader(table.rep.file)
+			dataBlock, err := r.ReadBlock(dataBlockHandle)
+			if err != nil {
+				panic(err)
+			}
+
+			dataIter := blockIter{
+				block: dataBlock,
+			}
+
+			dataIter.SeekFirst()
+
+			for dataIter.valid {
+				//fmt.Println("key=", dataIter.Key(), "val=", dataIter.Value())
+				dataIter.Next()
+			}
+		}
+	}
+
+}

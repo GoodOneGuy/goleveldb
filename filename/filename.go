@@ -7,5 +7,5 @@ func LogFileName(dbname string, number int) string {
 }
 
 func TableFileName(dbname string, number int) string {
-	return fmt.Sprintf("%s.sstab;e.%d", dbname, number)
+	return fmt.Sprintf("%s.table.%d", dbname, number)
 }
