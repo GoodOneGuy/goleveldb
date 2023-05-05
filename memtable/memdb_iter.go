@@ -19,20 +19,20 @@ func (it *dbIter) Next() {
 }
 
 func (it *dbIter) Seek(key []byte) {
-	it.iter.Seek(BytesToKey(key))
+	it.iter.Seek(key)
 }
 
 func (it *dbIter) Key() []byte {
 	entry := it.iter.Key()
-	keyLength, _ := util.ConsumeVarint(entry.data)
-	internalKey := util.GetLengthPrefixedSlice(entry.data)
+	keyLength, _ := util.ConsumeVarint(entry)
+	internalKey := util.GetLengthPrefixedSlice(entry)
 	return internalKey[:keyLength-8]
 }
 
 func (it *dbIter) Value() []byte {
 	entry := it.iter.Key()
-	keyLength, startLen := util.ConsumeVarint(entry.data)
-	return util.GetLengthPrefixedSlice(entry.data[startLen+int32(keyLength):])
+	keyLength, startLen := util.ConsumeVarint(entry)
+	return util.GetLengthPrefixedSlice(entry[startLen+int32(keyLength):])
 }
 
 func (it *dbIter) Valid() bool {

@@ -3,64 +3,35 @@ package memtable
 import (
 	"fmt"
 	"math/rand"
+	"ouge.com/goleveldb/iterator"
 	"ouge.com/goleveldb/util"
 )
 
 const kMaxHeight = 12
 const kBranching = 4
 
-// Comparator 比较函数
-type Comparator func(*Key, *Key) int32
+func internalKeyCmp(key1 []byte, key2 []byte) int32 {
 
-func defaultCompare(key1 *Key, key2 *Key) int32 {
-	if string(key1.data) == string(key2.data) {
+	if string(key1) == string(key2) {
 		return 0
-	} else if string(key1.data) < string(key2.data) {
+	} else if string(key1) < string(key2) {
 		return -1
 	} else {
 		return 1
 	}
 }
 
-func internalKeyCmp(key1 *Key, key2 *Key) int32 {
-	realKey1 := key1.UserKey()
-	realKey2 := key2.UserKey()
-	if string(realKey1) == string(realKey2) {
-		return 0
-	} else if string(realKey1) < string(realKey2) {
-		return -1
-	} else {
-		return 1
-	}
-}
-
-type Key struct {
-	data []byte
-}
-
-func (k *Key) UserKey() []byte {
-	key, _ := util.GetLengthPrefixedSlice2(k.data)
+func UserKey(k []byte) []byte {
+	key, _ := util.GetLengthPrefixedSlice2(k)
 	return key[:len(key)-8]
 }
 
-func StringToKey(str string) *Key {
-	return &Key{
-		data: []byte(str),
-	}
-}
-
-func BytesToKey(b []byte) *Key {
-	return &Key{
-		data: b,
-	}
-}
-
 type Node struct {
-	key  *Key
+	key  []byte
 	next []*Node
 }
 
-func NewNode(key *Key, height int32) *Node {
+func NewNode(key []byte, height int32) *Node {
 	node := &Node{
 		key: key,
 	}
@@ -72,17 +43,17 @@ func NewNode(key *Key, height int32) *Node {
 type MemTable struct {
 	head      *Node
 	maxHeight int32 // 当前最大高度，需要小于kMaxHeight
-	compare   Comparator
+	compare   iterator.Comparator
 	memSize   int32
 }
 
-func NewMemTable(cmp Comparator) *MemTable {
+func NewMemTable(cmp iterator.Comparator) *MemTable {
 	l := &MemTable{
 		head:      NewNode(nil, kMaxHeight),
 		maxHeight: 1,
 	}
 	if cmp == nil {
-		l.compare = defaultCompare
+		l.compare = iterator.DefaultCompare
 	} else {
 		l.compare = cmp
 	}
@@ -94,7 +65,7 @@ func (l *MemTable) Size() int32 {
 	return l.memSize
 }
 
-func (l *MemTable) Insert(key *Key) {
+func (l *MemTable) Insert(key []byte) {
 	height := l.randomHeight()
 	n := NewNode(key, height)
 
@@ -112,7 +83,7 @@ func (l *MemTable) Insert(key *Key) {
 		prev[i].next[i] = n
 	}
 
-	l.memSize += int32(len(key.data))
+	l.memSize += int32(len(key))
 }
 
 func (l *MemTable) DebugPrint() {
@@ -121,7 +92,7 @@ func (l *MemTable) DebugPrint() {
 	i := 1
 	for x.next[0] != nil {
 		x = x.next[0]
-		fmt.Println("跳表第", i, "个元素，key:", string(x.key.data), "height:", len(x.next))
+		fmt.Println("跳表第", i, "个元素，key:", string(x.key), "height:", len(x.next))
 		i++
 	}
 
@@ -136,7 +107,7 @@ func (l *MemTable) randomHeight() int32 {
 	return height
 }
 
-func (l *MemTable) Contains(key *Key) bool {
+func (l *MemTable) Contains(key []byte) bool {
 	_, x := l.findGreaterOrEqual(key)
 
 	if x != nil && l.compare(x.key, key) == 0 {
@@ -146,7 +117,7 @@ func (l *MemTable) Contains(key *Key) bool {
 	return false
 }
 
-func (l *MemTable) Get(key *Key) *Key {
+func (l *MemTable) Get(key []byte) []byte {
 	_, x := l.findGreaterOrEqual(key)
 
 	if x != nil && l.compare(x.key, key) == 0 {
@@ -156,14 +127,14 @@ func (l *MemTable) Get(key *Key) *Key {
 }
 
 // KeyIsAfterNode Return true if key is greater than the data stored in "n"
-func (l *MemTable) keyIsAfterNode(key *Key, node *Node) bool {
+func (l *MemTable) keyIsAfterNode(key []byte, node *Node) bool {
 	if key == nil || node == nil || node.key == nil {
 		return false
 	}
 	return l.compare(node.key, key) < 0
 }
 
-func (l *MemTable) findGreaterOrEqual(key *Key) ([]*Node, *Node) {
+func (l *MemTable) findGreaterOrEqual(key []byte) ([]*Node, *Node) {
 	result := make([]*Node, kMaxHeight)
 
 	cur := l.head
@@ -183,7 +154,7 @@ func (l *MemTable) findGreaterOrEqual(key *Key) ([]*Node, *Node) {
 	return result, target
 }
 
-func (l *MemTable) findLessThan(key *Key) *Node {
+func (l *MemTable) findLessThan(key []byte) *Node {
 	return nil
 }
 
@@ -192,7 +163,7 @@ func (l *MemTable) findLast() *Node {
 }
 
 type MemTableNodeIteratorFunc func(*Node) bool
-type MemTableKeyIteratorFunc func(*Key) bool
+type MemTableKeyIteratorFunc func([]byte) bool
 
 func (l *MemTable) ForEachNode(f MemTableNodeIteratorFunc) {
 	x := l.head.next[0]
@@ -234,7 +205,7 @@ func (it *memTableIter) Next() {
 	it.cur = it.cur.next[0]
 }
 
-func (it *memTableIter) Seek(key *Key) {
+func (it *memTableIter) Seek(key []byte) {
 	_, it.cur = it.l.findGreaterOrEqual(key)
 }
 
@@ -242,6 +213,6 @@ func (it *memTableIter) Valid() bool {
 	return it.cur != nil
 }
 
-func (it *memTableIter) Key() *Key {
+func (it *memTableIter) Key() []byte {
 	return it.cur.key
 }

@@ -2,6 +2,7 @@ package table
 
 import (
 	"fmt"
+	"ouge.com/goleveldb/iterator"
 	"ouge.com/goleveldb/util"
 )
 
@@ -89,29 +90,16 @@ type blockIter struct {
 	val     []byte
 }
 
-func (b *blockIter) Seek(key string) {
-	// 不管restart 都是 0
-	b.offset = 0
+//type Iterator interface {
+//	SeekToFirst()
+//	Next()
+//	Seek(key []byte)
+//	Key() []byte
+//	Value() []byte
+//	Valid() bool
+//}
 
-	for b.offset < uint64(len(b.block.data))-uint64(b.block.numRestarts+1)*4 {
-		e, offset := DecodeEntry(b.block.data[b.offset:])
-		curval := e.data[e.nonShared:]
-
-		curKey := append(b.lastKey[:e.shared], e.data[:e.nonShared]...)
-		fmt.Println("iter key:", string(curKey), "val:", string(curval))
-
-		if string(curKey) == key {
-			b.key = curKey
-			b.val = curval
-			return
-		}
-		b.offset += uint64(offset)
-		b.lastKey = curKey
-	}
-
-}
-
-func (b *blockIter) SeekFirst() {
+func (b *blockIter) SeekToFirst() {
 	// 不管restart 都是 0
 	b.offset = 0
 
@@ -139,10 +127,36 @@ func (b *blockIter) Next() {
 	b.val = curval
 }
 
-func (b *blockIter) Key() string {
-	return string(b.key)
+func (b *blockIter) Seek(key []byte) {
+	// 不管restart 都是 0
+	b.offset = 0
+
+	for b.offset < uint64(len(b.block.data))-uint64(b.block.numRestarts+1)*4 {
+		e, offset := DecodeEntry(b.block.data[b.offset:])
+		curval := e.data[e.nonShared:]
+
+		curKey := append(b.lastKey[:e.shared], e.data[:e.nonShared]...)
+		fmt.Println("iter key:", string(curKey), "val:", string(curval))
+		b.key = curKey
+		b.val = curval
+		b.offset += uint64(offset)
+		b.lastKey = curKey
+		if iterator.DefaultCompare(curKey, key) >= 0 {
+			fmt.Println("找到目标")
+			return
+		}
+	}
+	b.valid = false
 }
 
-func (b *blockIter) Value() string {
-	return string(b.val)
+func (b *blockIter) Key() []byte {
+	return b.key
+}
+
+func (b *blockIter) Value() []byte {
+	return b.val
+}
+
+func (b *blockIter) Valid() bool {
+	return b.valid
 }

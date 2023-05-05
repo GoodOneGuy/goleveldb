@@ -8,7 +8,7 @@ import (
 //  Record Format
 //
 //  ╔═════════╤══════════════════════════╗
-//  ║ field   │        conmment          ║
+//  ║ field   │ conmment                 ║
 //  ╠═════════╪══════════════════════════╣
 //  ║ klength │ varint32                 ║
 //  ║ userkey │ char[klength]            ║
@@ -58,27 +58,27 @@ func (m *MemDB) Add(s uint64, valueType ValueType, key string, value string) {
 	buf = util.EncodeVarint(buf, uint64(valueSize))
 	buf = append(buf, value...)
 
-	m.table.Insert(BytesToKey(buf))
+	m.table.Insert(buf)
 }
 
 func (m *MemDB) Get(key *LookupKey) (found bool, value string) {
 	memKey := key.MemTableKey()
 
-	fmt.Printf("key:%s, 序列化:%x\n", string(key.UserKey().data), memKey.data)
+	fmt.Printf("key:%s, 序列化:%x\n", string(key.UserKey()), memKey)
 
 	iter := newMemTableIter(m.table)
 	iter.Seek(memKey)
 	if iter.Valid() {
 		entry := iter.Key()
-		keyLength, startLen := util.ConsumeVarint(entry.data)
-		if m.table.compare(key.UserKey(), &Key{data: entry.data[startLen : startLen+int32(+keyLength-8)]}) == 0 {
+		keyLength, startLen := util.ConsumeVarint(entry)
+		if m.table.compare(key.UserKey(), entry[startLen:startLen+int32(+keyLength-8)]) == 0 {
 			// key 匹配上了
-			tag := util.DecodeFixed64(entry.data[startLen+int32(keyLength)-8:])
+			tag := util.DecodeFixed64(entry[startLen+int32(keyLength)-8:])
 			switch ValueType(tag & 0xff) {
 			case ValueTypeDeletion:
-				return true, string(util.GetLengthPrefixedSlice(entry.data[startLen+int32(keyLength):]))
+				return true, string(util.GetLengthPrefixedSlice(entry[startLen+int32(keyLength):]))
 			case ValueTypeValue:
-				return true, string(util.GetLengthPrefixedSlice(entry.data[startLen+int32(keyLength):]))
+				return true, string(util.GetLengthPrefixedSlice(entry[startLen+int32(keyLength):]))
 			default:
 			}
 		}
@@ -89,8 +89,8 @@ func (m *MemDB) Get(key *LookupKey) (found bool, value string) {
 
 func (it *memTableIter) Decode() (t ValueType, key string, value string) {
 	entry := it.Key()
-	keyLength, startLen := util.ConsumeVarint(entry.data)
-	tag := util.DecodeFixed64(entry.data[startLen+int32(keyLength)-8:])
-	internalKey := util.GetLengthPrefixedSlice(entry.data)
-	return ValueType(tag & 0xff), string(internalKey[:keyLength-8]), string(util.GetLengthPrefixedSlice(entry.data[startLen+int32(keyLength):]))
+	keyLength, startLen := util.ConsumeVarint(entry)
+	tag := util.DecodeFixed64(entry[startLen+int32(keyLength)-8:])
+	internalKey := util.GetLengthPrefixedSlice(entry)
+	return ValueType(tag & 0xff), string(internalKey[:keyLength-8]), string(util.GetLengthPrefixedSlice(entry[startLen+int32(keyLength):]))
 }

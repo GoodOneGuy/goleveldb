@@ -127,6 +127,8 @@ func (db *DB) writeProcess() {
 				key, _ := util.GetLengthPrefixedSlice2(data[1:])
 				db.mem.Add(db.lastSeq, memtable.ValueTypeDeletion, string(key), "")
 				db.lastSeq++
+			default:
+				fmt.Println("data err")
 			}
 			w.Done()
 		}
@@ -211,15 +213,15 @@ func (db *DB) Compaction() {
 
 // MinorCompaction caller must hold lock
 func (db *DB) MinorCompaction() {
-	fmt.Println("写入db文件")
 	fileName := filename.TableFileName(db.name, db.fileNumber)
 	builder := table.NewTableBuilder(fileName)
+	fmt.Println("写入db文件:", fileName)
 
 	iter := memtable.NewIterator(db.frozenMem)
 	iter.SeekToFirst()
 	for iter.Valid() {
 		key, val := iter.Key(), iter.Value()
-		fmt.Println("key=", key, "val=", val)
+		fmt.Println("key=", string(key), "val=", (val))
 		builder.Add([]byte(key), []byte(val))
 		iter.Next()
 	}

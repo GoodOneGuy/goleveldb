@@ -2,25 +2,20 @@ package memtable
 
 import (
 	"fmt"
-	"math/rand"
 	"testing"
-	"time"
 )
 
-func TestSkipList_Insert(t *testing.T) {
+func TestMemTable_Add(t *testing.T) {
+	mem := NewMemDB()
+	mem.Add(1, ValueTypeValue, "key_12", "value_2")
+	mem.Add(2, ValueTypeDeletion, "key_2", "value_1")
+	mem.Add(2, ValueTypeDeletion, "key_1", "value_1")
 
-	testStr := "abc"
-	var b []byte = nil
-	b = append(b, testStr...)
-	fmt.Print(string(b))
-
-	l := NewSkipList(nil)
-	rand.Seed(time.Now().UnixMilli())
-	for i := 0; i < 100; i++ {
-		l.Insert(StringToKey(fmt.Sprintf("key_%d", i)))
+	iter := NewIterator(mem)
+	iter.SeekToFirst()
+	for iter.Valid() {
+		key, val := iter.Key(), iter.Value()
+		fmt.Println("key=", string(key), "val=", val)
+		iter.Next()
 	}
-
-	l.DebugPrint()
-
-	fmt.Print(l.Contains(StringToKey("key_0")), l.Contains(StringToKey("456")))
 }

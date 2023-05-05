@@ -43,7 +43,7 @@ func TestReadDB(t *testing.T) {
 		block: block,
 	}
 
-	iter.SeekFirst()
+	iter.SeekToFirst()
 	var dataBlockHandle blockHandle
 	dataBlockHandle.DecodeFrom(iter.val)
 
@@ -58,7 +58,7 @@ func TestReadDB(t *testing.T) {
 		block: dataBlock,
 	}
 
-	dataIter.SeekFirst()
+	dataIter.SeekToFirst()
 
 	for dataIter.valid {
 		fmt.Println("key=", dataIter.Key(), "val=", dataIter.Value())
@@ -77,7 +77,7 @@ func TestCache_GetTable(t *testing.T) {
 				block: block,
 			}
 
-			iter.SeekFirst()
+			iter.SeekToFirst()
 			var dataBlockHandle blockHandle
 			dataBlockHandle.DecodeFrom(iter.val)
 
@@ -92,7 +92,7 @@ func TestCache_GetTable(t *testing.T) {
 				block: dataBlock,
 			}
 
-			dataIter.SeekFirst()
+			dataIter.SeekToFirst()
 
 			for dataIter.valid {
 				//fmt.Println("key=", dataIter.Key(), "val=", dataIter.Value())
@@ -101,4 +101,33 @@ func TestCache_GetTable(t *testing.T) {
 		}
 	}
 
+}
+
+func TestSeekDB(t *testing.T) {
+	table, err := Open("test.table.3")
+	if err != nil {
+		panic(err)
+	}
+
+	iter := NewTableIter(table)
+	iter.SeekToFirst()
+	fmt.Println("key=", string(iter.Key()), ", value=", string(iter.Value()))
+
+	for iter.Valid() {
+		fmt.Println("key=", string(iter.Key()), ", value=", string(iter.Value()))
+		iter.Next()
+	}
+}
+
+// key= key_266 , value= WSVtJBvSfWpkyEVGgIwdfSWMOqvJPHcUPLFggTtwECawapMMyzuIEGrwiIbgDiWnCmbYPjzsIFCYmSXdwjmfoTUaEPMGmDQBCWpz
+func TestSeekKeyDB(t *testing.T) {
+	table, err := Open("test.table.3")
+	if err != nil {
+		panic(err)
+	}
+
+	iter := NewTableIter(table)
+	iter.SeekToFirst()
+	iter.Seek([]byte("key_266"))
+	fmt.Println("val=", string(iter.Value()))
 }

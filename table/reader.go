@@ -16,6 +16,7 @@ func NewReader(file io.Reader) *Reader {
 		reader: file,
 	}
 }
+
 func (r *Reader) ReadBlock(handle blockHandle) (*Block, error) {
 
 	dataLen := handle.size + kBlockTrailerSize

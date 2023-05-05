@@ -6,7 +6,7 @@ import (
 	"ouge.com/goleveldb/util"
 )
 
-const kBlockTableSize = 10 * 1024
+const kBlockTableSize = 5 * 1024
 
 type tableBuilder struct {
 	offset            uint64

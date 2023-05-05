@@ -24,22 +24,16 @@ func NewLookupKey(key string, seq uint64) *LookupKey {
 	}
 }
 
-func (l *LookupKey) MemTableKey() *Key {
-	return &Key{
-		data: l.dst[:],
-	}
+func (l *LookupKey) MemTableKey() []byte {
+	return l.dst[:]
 }
 
-func (l *LookupKey) InternalKey() *Key {
-	return &Key{
-		data: l.dst[l.kStart:],
-	}
+func (l *LookupKey) InternalKey() []byte {
+	return l.dst[l.kStart:]
 }
 
-func (l *LookupKey) UserKey() *Key {
-	return &Key{
-		data: l.dst[l.kStart : len(l.dst)-8],
-	}
+func (l *LookupKey) UserKey() []byte {
+	return l.dst[l.kStart : len(l.dst)-8]
 }
 
 func packSeqAndType(seq uint64, t ValueType) uint64 {
