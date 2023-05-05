@@ -11,10 +11,11 @@ const kMaxHeight = 12
 const kBranching = 4
 
 func internalKeyCmp(key1 []byte, key2 []byte) int32 {
-
-	if string(key1) == string(key2) {
+	realKey1 := UserKey(key1)
+	realKey2 := UserKey(key2)
+	if string(realKey1) == string(realKey2) {
 		return 0
-	} else if string(key1) < string(key2) {
+	} else if string(realKey1) < string(realKey2) {
 		return -1
 	} else {
 		return 1

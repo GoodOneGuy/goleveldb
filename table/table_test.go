@@ -2,6 +2,7 @@ package table
 
 import (
 	"fmt"
+	"ouge.com/goleveldb/iterator"
 	"testing"
 )
 
@@ -130,4 +131,37 @@ func TestSeekKeyDB(t *testing.T) {
 	iter.SeekToFirst()
 	iter.Seek([]byte("key_266"))
 	fmt.Println("val=", string(iter.Value()))
+}
+
+func TestMergeDB(t *testing.T) {
+	table, err := Open("test.table.2")
+	if err != nil {
+		panic(err)
+	}
+
+	iter := NewTableIter(table)
+	iter.SeekToFirst()
+
+	table2, err := Open("test.table.3")
+	if err != nil {
+		panic(err)
+	}
+
+	iter2 := NewTableIter(table2)
+	iter2.SeekToFirst()
+
+	table3, err := Open("test.table.4")
+	if err != nil {
+		panic(err)
+	}
+
+	iter3 := NewTableIter(table3)
+	iter3.SeekToFirst()
+
+	mergedIter := iterator.NewMergeIter([]iterator.Iterator{iter, iter2, iter3})
+	mergedIter.SeekToFirst()
+	for mergedIter.Valid() {
+		fmt.Println("key=", string(mergedIter.Key()), "val=", string(mergedIter.Value()))
+		mergedIter.Next()
+	}
 }

@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"ouge.com/goleveldb/util"
 	"sync"
@@ -88,7 +89,7 @@ func TestDBTable(t *testing.T) {
 
 	start := time.Now()
 	for j := 0; j < 1000; j++ {
-		key := fmt.Sprintf("key_%d", j)
+		key := fmt.Sprintf("Key_%d", rand.Int31())
 		val := util.RandomString(100)
 		db.Put(string(key), string(val))
 	}
