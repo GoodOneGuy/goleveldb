@@ -105,7 +105,7 @@ func TestCache_GetTable(t *testing.T) {
 }
 
 func TestSeekDB(t *testing.T) {
-	table, err := Open("test.table.3")
+	table, err := Open("test.table.5")
 	if err != nil {
 		panic(err)
 	}
@@ -160,8 +160,12 @@ func TestMergeDB(t *testing.T) {
 
 	mergedIter := iterator.NewMergeIter([]iterator.Iterator{iter, iter2, iter3})
 	mergedIter.SeekToFirst()
+
+	builder := NewTableBuilder("test.table.5")
 	for mergedIter.Valid() {
 		fmt.Println("key=", string(mergedIter.Key()), "val=", string(mergedIter.Value()))
+		builder.Add(mergedIter.Key(), mergedIter.Value())
 		mergedIter.Next()
 	}
+	builder.Finish()
 }
